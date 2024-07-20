@@ -18,10 +18,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import path from "path";
 import * as FileSystem from "expo-file-system";
+import { Video } from "expo-av";
 const CameraScreen = () => {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>();
   const [picture, setPicture] = useState<CameraCapturedPicture>();
+  const [isRecording, setIsRecording] = useState(false);
+  const [video, setVideo] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
@@ -33,10 +36,26 @@ const CameraScreen = () => {
   const toggleCamFacing = () => {
     setFacing((current) => (current === "back" ? "front" : "back"));
   };
+
+  const onPress = () => {
+    if (isRecording) {
+      cameraRef.current?.stopRecording();
+    } else {
+      takePicture();
+    }
+  };
   const takePicture = async () => {
     const res = await cameraRef.current?.takePictureAsync();
     setPicture(res);
     console.log(res);
+  };
+
+  const startRecording = async () => {
+    setIsRecording(true);
+    const res = await cameraRef.current?.recordAsync({ maxDuration: 60 });
+    setVideo(res?.uri || "");
+    setIsRecording(false);
+    console.log("Recorded", res);
   };
 
   const saveFile = async (uri: string) => {
@@ -47,6 +66,8 @@ const CameraScreen = () => {
       to: FileSystem.documentDirectory + fileName,
     });
     setPicture(undefined);
+    setVideo(null);
+
     router.back();
   };
 
@@ -54,19 +75,37 @@ const CameraScreen = () => {
     return <ActivityIndicator />;
   }
 
-  if (picture) {
+  if (picture || video) {
     return (
       <View style={{ flex: 1 }}>
-        <Image
-          source={{ uri: picture.uri }}
-          style={{ width: "100%", flex: 1 }}
-        />
+        {picture && (
+          <Image
+            source={{ uri: picture.uri }}
+            style={{ width: "100%", flex: 1 }}
+          />
+        )}
+        {video && (
+          <Video
+            source={{ uri: video }}
+            style={{ width: "100%", flex: 1 }}
+            shouldPlay
+            isLooping
+          />
+        )}
         <View style={{ padding: 10 }}>
           <SafeAreaView edges={["bottom"]}>
-            <Button title="Save" onPress={() => saveFile(picture.uri)} />
+            <Button
+              title="Save"
+              onPress={() => saveFile(picture?.uri || video || "")}
+            />
           </SafeAreaView>
         </View>
-        <Pressable style={styles.button} onPress={() => setPicture(undefined)}>
+        <Pressable
+          style={styles.button}
+          onPress={() => {
+            setPicture(undefined);
+            setVideo(null);
+          }}>
           <MaterialIcons name="close" size={30} color="white" />
         </Pressable>
       </View>
@@ -75,12 +114,20 @@ const CameraScreen = () => {
 
   return (
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing}>
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing={facing}
+        mode="video">
         <View style={styles.footer}>
           <View />
           <Pressable
-            style={styles.recordButton}
-            onPress={takePicture}></Pressable>
+            style={[
+              styles.recordButton,
+              { backgroundColor: isRecording ? "crimson" : "white" },
+            ]}
+            onPress={onPress}
+            onLongPress={startRecording}></Pressable>
           <MaterialIcons
             name="flip-camera-ios"
             size={30}
